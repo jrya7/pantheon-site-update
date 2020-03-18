@@ -35,6 +35,7 @@ The script does the following in order:
 1. **Pauses** and asks to deploy changes from dev->test **_MAKE SURE DEV HAS FINISHED SYNCHING BEFORE CONTINUING_**
 1. Adds comit message and pushes to test
 1. **Pauses** and asks to deploy changes from test->live **_MAKE SURE TEST HAS FINISHED SYNCHING BEFORE CONTINUING_**
+1. Adds comit message and pushes to live
 1. Asks to delete Multidev environment
 1. Asks to log out of Terminus
 1. Asks to delete local cloned directory

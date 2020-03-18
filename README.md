@@ -11,6 +11,7 @@ chmod 755 pantheon-site-update.sh
 ``
 
 Then run the script
+
 ``bash
 ./pantheon-site-update.sh
 ``

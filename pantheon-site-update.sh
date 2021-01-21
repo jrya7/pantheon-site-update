@@ -251,7 +251,7 @@ multidev_finish() {
     #fi
 
     # set to git mode
-	printf "\n [msg] switching to git connection-mode..."
+	printf "\n [msg] switching to git connection-mode...\n"
 	terminus connection:set ${SITENAME}.${MDENV} git
 	if [ $? = 1 ]; then
 		$((ERRORS++))

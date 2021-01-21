@@ -1,19 +1,31 @@
 #!/bin/bash
 
 
+# function for checking logged into terminus
 terminus_auth() {
+	# run the whoami terminus command
 	response=`terminus auth:whoami`
+
+	# user is not logged in
 	if [ "$response" == "" ]; then
-		echo "You are not authenticated with Terminus..."
+		# let the user know
+		echo " [msg] you are not logged into Terminus..."
+
+		# try to login with terminus command
 		terminus auth:login
+
+		# is logged in success
 		if [ $? -eq 0 ]; then
-    		        echo "Login successful!"
+			echo "Login successful!"
+		# cant log in
 		else
-    			echo "Login failed. Please re-run the script and try again."
+			echo " [msg] login failed, please try again"
 			exit 0
 		fi
+
+	# user is logged in so continue
 	else
-		read -p "Logged in as $response - [y]Continue or [n]login as someone else? [y/n] " login;
+		read -p " [msg] logged in as $response press [y] to continue or [n] to login as someone else: " login;
 		case $login in
 			[Yy]* ) ;;
 			[Nn]* ) terminus auth:logout;
@@ -22,30 +34,37 @@ terminus_auth() {
 	fi
 }
 
+# function to loop thru the update steps
 step_route() {
     FRAMEWORK=`terminus site:info $SITENAME --field=framework`
     ERRORS='0'
     if [ "$FRAMEWORK" = 'drupal' ]; then
-            case $STEP in
-                    [start]* ) multidev_drupal_update $SITENAME;;
-                    [finish]* ) multidev_finish $SITENAME;;
-                    * ) echo "not a valid function."; exit 1;;
-            esac
+        case $STEP in
+                [start]* ) multidev_drupal_update $SITENAME;;
+                [finish]* ) multidev_finish $SITENAME;;
+                * ) echo " not a valid function, exiting..."; exit 1;;
+        esac
     fi
 }
 
+# function to create multidev env to hold the updates
 multidev_update_prep() {
-	printf "\nCreating or updating multidev for site -- ${SITENAME}\n"
+	printf "\n creating or updating multidev for site -- ${SITENAME}\n"
+
+	# set the multidev env name
 	MDENV='env-term'
 
-	read -p "Backup live? [y/n]  " yn
+	# ask if user wants to backup the live env first
+	read -p " backup live? [y/n]  " yn
 	case $yn in
-		[Yy]* ) printf "\nCreating backup of live environment for ${SITENAME}...\n"; 
+		[Yy]* ) printf "\n [msg] creating backup of live environment for ${SITENAME}...\n"; 
 				terminus backup:create ${SITENAME}.live;;
 	esac
+
+	# check for erros in backing up
 	if [ $? = 1 ]; then
 		$((ERRORS++))
-		echo "error in backup live"
+		echo " [err] error in making backup of live environment"
 	fi
 
 	# check if multidev is created
@@ -53,144 +72,166 @@ multidev_update_prep() {
 
 	# multidev not created
 	if [ -z "$envExist" ]; then
-		printf "\nCreating multidev env-term enironment...\n"
-		read -p "Pull down db from which environment? (dev/test/live) "	FROMENV
+		# start to create the multidev env
+		printf "\n [msg] creating multidev env-term enironment\n"
+
+		# get the env to pull the db from
+		read -p " pull down db from which environment? [dev/test/live] "	FROMENV
+
+		# create the multidev and check for errors
 		terminus multidev:create ${SITENAME}.${FROMENV} ${MDENV}
 		if [ $? = 1 ]; then
 			$((ERRORS++))
-			echo "error in creating env"
+			echo "\n [err] error in creating multidev environment"
 		fi
-	# multidev created
+	# multidev already created
 	else
-		read -p "Multidev env-term environment already exists.  Deploy db from environment or none (dev/test/live/none) " FROMENV
+		read -p "\n [msg] multidev ${MDENV} environment already exists \n pull down db from which environment? [dev/test/live/none] " FROMENV
 		if [ $FROMENV != 'none' ]; then
+			# clone the selected environment into the multidev
 			terminus env:clone-content --cc --updatedb -- $SITENAME.$FROMENV $MDENV
 		fi
 	fi
 
-	printf "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nThe URL for the new environment is http://${MDENV}-${SITENAME}.pantheonsite.io/\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+	# output the multidev environment to the user for testing
+	printf "\n multidev environment created - https://${MDENV}-${SITENAME}.pantheonsite.io"
 
-	# TODO may remove or check
-	echo "Switching to sftp connection-mode..."
-	terminus connection:set ${SITENAME}.${MDENV} sftp
+
+	# set to git mode
+	printf "\n [msg] switching to git connection-mode...\n"
+	terminus connection:set ${SITENAME}.${MDENV} git
 	if [ $? = 1 ]; then
 		$((ERRORS++))
-		echo "error in switching to sftp"
+		echo " [msg] error in switching to git"
 	fi
-
 }
 
+# function to start updating
 multidev_drupal_update() {
 	# setup or update multidev
 	multidev_update_prep
 
 	# check for upstream updates
 	upstreamCheck=`terminus upstream:updates:status -- ${SITENAME}.${MDENV}`
-	if [ "$upstreamCheck" == "outdated" ]; then
-		# has upstream so ask for updates
-		read -p "Apply upstream updates? [y/n]  " yn
-		case $yn in
-			[Yy]* ) printf "\nSwitching to git connection-mode...\n"
-					terminus connection:set ${SITENAME}.${MDENV} git
-					if [ $? = 1 ]; then
-						$((ERRORS++))
-						printf "\nerror in switching to git"
-					fi
-					printf "\nApplying upstream updates for ${SITENAME}...\n"; 
-					terminus upstream:updates:apply --updatedb --accept-upstream -- ${SITENAME}.${MDENV}
 
-					printf "\nSwitching to sftp connection-mode...\n"
-					terminus connection:set ${SITENAME}.${MDENV} sftp
-					if [ $? = 1 ]; then
-						$((ERRORS++))
-						printf "\nerror in switching to sftp"
-					fi
+	# there is upstream updates
+	if [ "$upstreamCheck" == "outdated" ]; then
+		# let the user know there are updates
+		printf "\n [msg] upstream updates found, gathering list...\n"
+
+		# list the upstream updates first
+		terminus upstream:updates:list --fields=datetime,message,author -- ${SITENAME}.${MDENV}
+
+		# has upstream so ask for updates
+		read -p " apply upstream updates? [y/n]  " yn
+		case $yn in
+			[Yy]* ) printf "\n [msg] applying upstream updates for ${SITENAME}...\n"; 
+					terminus upstream:updates:apply --updatedb --accept-upstream -- ${SITENAME}.${MDENV}
 		esac
+	# there is no upstream updates
 	else
-		printf "\nNo upstream updates found\n"
+		printf "\n [msg] no upstream updates found"
 	fi
 
-	printf "\nChecking for module updates...\n"
-
-	# update drupal modules
-	terminus drush ${SITENAME}.${MDENV} -- up
+	# switch back to sftp mode for module update checks
+	printf "\n [msg] switching to sftp connection-mode for module updates..."
+	terminus connection:set ${SITENAME}.${MDENV} sftp
 	if [ $? = 1 ]; then
 		$((ERRORS++))
-		printf "\nerror in drush up"
-		UPFAIL='Drush up failed.'
+		echo " [msg] error in switching to sftp"
 	fi
 
-	if [ -z "$UPFAIL" ]; then
-		printf "\nRunning 'drush updb'...\n"
-		terminus drush ${SITENAME}.${MDENV} -- updb
-		if [ $? = 1 ]; then
-			$((ERRORS++))
-			printf "\nerror in updb"
-			UPDBFAIL='Drush updb failed.'
-		fi
-		printf "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nSite has been updated on $MDENV multidev site, test it here - http://${MDENV}-${SITENAME}.pantheonsite.io/\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n"
-	fi
+	# inform the user of the current action
+	printf "\n [msg] grabbing for module info...\n"
+
+	# check for updates
+	terminus drush ${SITENAME}.${MDENV} -- ups
+
+	# ask if user wants to update
+	read -p " apply module updates? [y/n]  " yn
+	case $yn in
+		[Yy]* ) printf "\n [msg] applying module updates for ${SITENAME}...\n"; 
+				# update drupal modules
+				terminus drush ${SITENAME}.${MDENV} -- up
+				if [ $? = 1 ]; then
+					$((ERRORS++))
+					printf "\n [msg] error in module updates"
+					UPFAIL='Drush up failed.'
+				fi
+
+				# run the database updates
+				if [ -z "$UPFAIL" ]; then
+					printf "\n [msg] applying database updates...\n"
+					terminus drush ${SITENAME}.${MDENV} -- updb
+					if [ $? = 1 ]; then
+						$((ERRORS++))
+						printf "\n [msg] error in database updates"
+						UPDBFAIL='Drush updb failed.'
+					fi
+				fi
+	esac
+
+	# done with updates so let user check
+	printf "\n multidev environment updated - https://${MDENV}-${SITENAME}.pantheonsite.io \n"
+	
 
 	# error checking
 	multidev_update_errors
 }
 
+
+# check for errors and output
 multidev_update_errors() {
 	if [ $ERRORS != '0' ]; then
 		WORD='error was'
 		if [ $ERRORS > '1' ]; then
 			WORD='errors were'
 		fi
-		echo "$ERRORS $WORD reported.  Scroll up and look for the red."
+		echo " [err] $ERRORS $WORD reported, scroll up and look for the red"
 	fi
 }
 
+
+# merge the multidev environment into dev
 multidev_merge() {
-	## In this case, 'origin' is Pantheon remote name.  
-    git clone $GITURL pantheon-clone_${SITENAME}
-    cd pantheon-clone_${SITENAME}
-    git fetch --all
+	# use terminus merge-to-dev to merge multidev into dev
+	terminus multidev:merge-to-dev --updatedb -- ${SITENAME}.${MDENV}
 
-    # check for errors
-    if [ $? -ne 0 ]; then
-	    echo "git fetch --all failed"
-	    exit 1
-    fi
-
-	# merge back to pantheon
-	git merge origin/$MDENV
-	
-	if [ $? -ne 0 ]; then
-	    echo "Merge failed"
-	    Timestamp = date +"%Y-%m-%d-%T"
-	    git merge --abort 2> conflicts.${Timestamp}.txt 
-	    git reset --hard origin/master
-	    git clean -df
-	    exit 1
-	fi
-
-	git push origin master
-	printf "\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nMultidev pushed to master. Visit dev environment to view updates\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n"
+	# let the user know
+	printf "\n multidev merged into dev - https://dev-${SITENAME}.pantheonsite.io \n"
 }
 
+
+# deploy from dev to test
 multidev_deploy_to_test() {
-	read -p "Deploy changes to test environment on Pantheon? MAKE SURE DEV IS SYNCHED FIRST [y/n] " DEPLOYTEST
+	read -p " deploy changes to test environment on Pantheon? MAKE SURE DEV IS SYNCHED FIRST [y/n] " DEPLOYTEST
 	case $DEPLOYTEST in
-		[Yy]* ) read -p "Please provide a note to attach to this deployment to Test: " MESSAGE
-				terminus env:deploy --note="$MESSAGE" --cc --updatedb -- ${SITENAME}.test;;
+		[Yy]* ) read -p " provide a note to attach to this deployment: " MESSAGE
+				terminus env:deploy --note="$MESSAGE" --updatedb -- ${SITENAME}.test
+				terminus env:clear-cache ${SITENAME}.test
+				;;
 		[Nn]* ) exit 0;;
 	esac
 }
 
+
+# deploy from test to live
 multidev_deploy_to_live() {
-	read -p "Deploy changes to live environment on Pantheon? MAKE SURE TEST IS SYNCHED FIRST [y/n] " DEPLOYLIVE
+	# print out a new line for spacing
+	printf '\n'
+
+	read -p " deploy changes to live environment on Pantheon? MAKE SURE TEST IS SYNCHED FIRST [y/n] " DEPLOYLIVE
 	case $DEPLOYLIVE in
-		[Yy]* ) read -p "Please provide a note to attach to this deployment to Live: " MESSAGE
-				terminus env:deploy --note="$MESSAGE" --cc --updatedb -- ${SITENAME}.live;;
+		[Yy]* ) read -p " provide a note to attach to this deployment: " MESSAGE
+				terminus env:deploy --note="$MESSAGE" --updatedb -- ${SITENAME}.live
+				terminus env:clear-cache ${SITENAME}.live
+				;;
 		[Nn]* ) exit 0;;
 	esac
 }
 
+
+# finish up with things
 multidev_finish() {
 	SITE=$1
 	MDENV='env-term'
@@ -198,23 +239,26 @@ multidev_finish() {
 	SITEID=${SITEINFO#*: }
 	GITURL="ssh://codeserver.dev.${SITEID}@codeserver.dev.${SITEID}.drush.in:2222/~/repository.git"
 
-    read -p "Please provide git commit message: " MESSAGE
-    terminus env:commit ${SITENAME}.${MDENV} --message="$MESSAGE" 
-    terminus env:commit ${SITENAME}.${MDENV}
+	# TODO - TEST IF COMMIT NEEDED AFTER DRUPAL MODULE UPDATES
+	# get the message for the commits and commit
+    #read -p " provide commit message: " MESSAGE
+    #terminus env:commit ${SITENAME}.${MDENV} --message="$MESSAGE" 
 
     # check for errors
-    if [ $? -ne 0 ]; then
-	    echo "git commit failed"
-	    exit 1
-    fi
+    #if [ $? -ne 0 ]; then
+	#    echo " [err] git commit failed"
+	#    exit 1
+    #fi
 
-    echo "Returning env-term to git connection-mode..."
-    terminus connection:set ${SITENAME}.${MDENV} git
-    if [ $? -ne 0 ]; then
-	    echo "Switching connection mode back to git failed."
-	    exit 1
-    fi 
+    # set to git mode
+	printf "\n [msg] switching to git connection-mode..."
+	terminus connection:set ${SITENAME}.${MDENV} git
+	if [ $? = 1 ]; then
+		$((ERRORS++))
+		echo " [msg] error in switching to git"
+	fi
 	
+
 	# merge to git and make pantheon cycles
 	multidev_merge
 	multidev_deploy_to_test
@@ -222,9 +266,9 @@ multidev_finish() {
 
 
 	# finish by deleting multidev
-	read -p "Delete env-term multidev? [y/n]  " yn
+	read -p " delete env-term multidev? [y/n]  " yn
 	case $yn in
-		[Yy]* ) terminus multidev:delete --delete-branch -- ${SITENAME}.${MDENV}
+		[Yy]* ) terminus multidev:delete --delete-branch --yes -- ${SITENAME}.${MDENV}
 	esac
 
 }
@@ -233,31 +277,33 @@ multidev_finish() {
 # check for logged in user
 terminus_auth
 
-# grab the sites
-printf '\nLoading site list...\n'
-terminus site:list --fields="name,framework,ID"
 
-# set the site
-read -p 'Type in site name and press [Enter] to start updating: ' SITENAME
+# grab the sites and display
+printf '\n loading site list...\n'
+terminus site:list --fields="name,plan_name,framework,ID"
+
+# print out a new line for spacing
+printf '\n'
+
+# set the site and start to update
+read -p ' enter a site name and press [Enter] to start updating: ' SITENAME
 STEP='start'
 step_route
 
+
 # final steps
-read -p "Press [Enter] to finish updating ${SITENAME}" 
+read -p " press [Enter] to finish updating ${SITENAME}" 
 STEP='finish'
 step_route
 
-read -p 'Log out of Terminus? [y/n] ' LOGOUT
+# cleaing up terminus
+read -p ' [msg] log out of Terminus? [y/n] ' LOGOUT
   case $LOGOUT in
         [Yy]* ) terminus auth:logout
-
   esac
 
-read -p "Delete pantheon-clone folder? [y/n] " yn
-  case $yn in
-        [Yy]*) cd ..
-               printf "deleting pantheon-clone...\n" 
-               rm -rf pantheon-clone_${SITENAME};;
-  esac
+
+# output site updated
+printf "\n ${SITENAME} updated!!\n\n"
 
 exit 0

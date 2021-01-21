@@ -28,9 +28,6 @@ The script does the following in order:
 1. Checks for upstream updates and asks to apply to Multidev
 1. Checks for Drupal modules updates and asks to apply to Multidev
 1. **Pauses** and returns URL to Multidev for testing
-1. Adds commit message and switches to git mode
-1. Clones master repo from Pantheon into current working directory and cd into cloned directory
-1. Fetch all tags 
 1. Merges Multidev branch with origin **_THIS PUSHES CODE TO DEV ENVIRONMENT_**
 1. **Pauses** and asks to deploy changes from dev->test **_MAKE SURE DEV HAS FINISHED SYNCHING BEFORE CONTINUING_**
 1. Adds comit message and pushes to test
@@ -38,5 +35,6 @@ The script does the following in order:
 1. Adds comit message and pushes to live
 1. Asks to delete Multidev environment
 1. Asks to log out of Terminus
-1. Asks to delete local cloned directory
-1. Tah-dah your Drupal site has been updated with upstream and module updates!
+
+
+Tah-dah your Drupal site has been updated with upstream and module updates!

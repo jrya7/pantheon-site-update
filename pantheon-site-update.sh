@@ -9,14 +9,14 @@ terminus_auth() {
 	# user is not logged in
 	if [ "$response" == "" ]; then
 		# let the user know
-		echo " [msg] you are not logged into Terminus..."
+		echo " [msg] you are not logged into Terminus, trying to login..."
 
 		# try to login with terminus command
 		terminus auth:login
 
 		# is logged in success
 		if [ $? -eq 0 ]; then
-			echo "Login successful!"
+			echo " [msg] login successful!"
 		# cant log in
 		else
 			echo " [msg] login failed, please try again"
@@ -65,6 +65,7 @@ multidev_update_prep() {
 	if [ $? = 1 ]; then
 		$((ERRORS++))
 		echo " [err] error in making backup of live environment"
+		exit 0
 	fi
 
 	# check if multidev is created

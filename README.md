@@ -16,25 +16,19 @@ Then run the script
 ./pantheon-site-update.sh
 ``
 
-Script will walk you through steps with instructions/information
+Script will walk you through steps with instructions and information
 
 
 ## Workflow
 The script does the following in order:
 1. Checks if you are logged in via Terminus
 1. Shows lists of sites under your account that are available
-1. Option to backup live
-1. Creates Multidev environment and pulls down DB from either dev/test/live
-1. Checks for upstream updates and asks to apply to Multidev
-1. Checks for Drupal modules updates and asks to apply to Multidev
-1. **Pauses** and returns URL to Multidev for testing
-1. Merges Multidev branch with origin **_THIS PUSHES CODE TO DEV ENVIRONMENT_**
-1. **Pauses** and asks to deploy changes from dev->test **_MAKE SURE DEV HAS FINISHED SYNCHING BEFORE CONTINUING_**
+1. Option to backup live first
+1. Checks for upstream updates and asks to apply to dev environment
+1. Checks for Drupal modules updates and asks to apply to dev environment
+1. Returns URL to dev environment for testing
 1. Adds comit message and pushes to test
-1. **Pauses** and asks to deploy changes from test->live **_MAKE SURE TEST HAS FINISHED SYNCHING BEFORE CONTINUING_**
 1. Adds comit message and pushes to live
-1. Asks to delete Multidev environment
-1. Asks to log out of Terminus
 
 
 Tah-dah your Drupal site has been updated with upstream and module updates!

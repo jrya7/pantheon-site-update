@@ -1,5 +1,5 @@
 # pantheon-site-update
-Command line script to update Drupal sites on Pantheon
+Command line script to update Drupal sites on Pantheon. Will check for and apply upstream updates and module updates, then push up to dev, test, and live allowing time to text before pushing to the next environment.
 
 ## Setup
 Download or copy script and cd into directory with script
@@ -12,11 +12,11 @@ Then run the script
 
 ``./pantheon-site-update.sh``
 
-Script will walk you through steps with instructions and information
+Script will walk you through steps with instructions and information  
 
 Or pass the Pantheon sitename into the script
 
-``./pantheon-site-update.sh SITENAME``
+``./pantheon-site-update.sh $SITENAME``
 
 
 ## Workflow

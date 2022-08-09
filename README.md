@@ -14,9 +14,6 @@ Then run the script
 
 Script will walk you through steps with instructions and information
 
-<br/>
-<br/>
-
 Or pass the Pantheon sitename into the script
 
 ``./pantheon-site-update.sh $SITENAME``

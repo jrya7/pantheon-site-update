@@ -22,7 +22,7 @@ Or pass the Pantheon sitename into the script
 ## Workflow
 The script does the following in order:
 1. Checks if you are logged in via Terminus
-1. Shows lists of sites under your account that are available
+1. Shows lists of sites under your account that are available if site name was not passed into the script
 1. Option to backup live first
 1. Checks for upstream updates and asks to apply to dev environment
 1. Checks for Drupal modules updates and asks to apply to dev environment

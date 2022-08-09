@@ -37,7 +37,7 @@ terminus_auth_check() {
 }
 
 
-# function to check the site
+# function to check the site for being drupal
 drupal_check() {
 	# get the framework of the site and set regex
 	FRAMEWORK=`terminus site:info $SITENAME --field=framework`
@@ -92,13 +92,7 @@ drupal_prep() {
 	CONNECTION=`terminus env:info --field connection_mode -- $SITENAME.dev`
 	if [ "$CONNECTION" != "git" ]; then
 		# set to git mode
-		printf "\n[msg] switching to git connection-mode...\n"
-		terminus connection:set ${SITENAME}.dev git
-		if [ $? = 1 ]; then
-			$((ERRORS++))
-			echo "[msg] error in switching to git"
-			exit 0
-		fi
+		env_git
 	fi
 }
 
@@ -106,7 +100,7 @@ drupal_prep() {
 # update the drupal dev site
 drupal_update() {
 	# let the user know checking for updates
-	printf "\nchecking for upstream updates"
+	printf "\nchecking for upstream updates\n"
 
 	# check for upstream updates
 	upstreamCheck=`terminus upstream:updates:status -- ${SITENAME}.dev`
@@ -114,7 +108,7 @@ drupal_update() {
 	# there is upstream updates
 	if [ "$upstreamCheck" == "outdated" ]; then
 		# let the user know there are updates
-		printf "\nupstream updates found, gathering list...\n"
+		printf "upstream updates found, gathering list...\n"
 
 		# list the upstream updates first
 		terminus upstream:updates:list --fields=datetime,message,author -- ${SITENAME}.dev
@@ -131,12 +125,7 @@ drupal_update() {
 	fi
 
 	# switch back to sftp mode for module update checks
-	printf "\n[msg] switching to sftp connection-mode for module updates..."
-	terminus connection:set ${SITENAME}.dev sftp
-	if [ $? = 1 ]; then
-		$((ERRORS++))
-		echo "[msg] error in switching to sftp"
-	fi
+	env_sftp
 
 	# inform the user of the current action
 	printf "\n[msg] grabbing module update info...\n"
@@ -166,6 +155,16 @@ drupal_update() {
 						UPDBFAIL='drush command updb (database updates) failed'
 					fi
 				fi
+
+				# commit changes before pushing
+				read -p "commit changes to dev environment on Pantheon? [y/n] " DEPLOYDEV
+				case $DEPLOYDEV in
+					[Yy]* ) read -p "provide a note to attach to this commit: " MESSAGEDEV
+							terminus env:commit --message="$MESSAGEDEV" --force -- ${SITENAME}.dev
+							;;
+					[Nn]* ) exit 0;;
+				esac
+
 	esac
 
 	# done with updates so let user check
@@ -178,14 +177,6 @@ drupal_update() {
 
 # push up the drupal dev site
 drupal_push() {
-	# set back to git mode
-	printf "\n[msg] switching to git connection-mode...\n"
-	terminus connection:set ${SITENAME}.dev git
-	if [ $? = 1 ]; then
-		$((ERRORS++))
-		echo "[err] error in switching to git\n"
-	fi
-
 	# check with user and then move to test
 	read -p "deploy changes to test environment on Pantheon? [y/n] " DEPLOYTEST
 	case $DEPLOYTEST in
@@ -222,6 +213,30 @@ errors_check() {
 }
 
 
+# switch to git mode
+env_git() {
+	# set back to git mode
+	printf "\n[msg] switching to git connection-mode...\n"
+	terminus connection:set ${SITENAME}.dev git
+	if [ $? = 1 ]; then
+		$((ERRORS++))
+		echo "[err] error in switching to git\n"
+	fi
+}
+
+
+# switch to sftp mode
+env_sftp() {
+	# switch back to sftp mode for module update checks
+	printf "\n[msg] switching to sftp connection-mode for module updates...\n"
+	terminus connection:set ${SITENAME}.dev sftp
+	if [ $? = 1 ]; then
+		$((ERRORS++))
+		echo "[msg] error in switching to sftp"
+	fi
+}
+
+
 ##########################################
 
 
@@ -234,15 +249,22 @@ echo "starting pantheon site update..."
 # check for logged in user
 terminus_auth_check
 
-# grab the sites and display
-printf '\nfetching site list...\n'
-terminus site:list --fields="name,plan_name,framework,ID"
+# check for site name passed
+ if [ "$#" -eq  "0" ]; then
+ 	# no arguments so get site list and input
+ 	# grab the sites and display
+	printf '\nfetching site list...\n'
+	terminus site:list --fields="name,plan_name,framework,ID"
 
-# print out a new line for spacing
-printf '\n'
+	# print out a new line for spacing
+	printf '\n'
 
-# set the site and start to update
-read -p 'enter a site name and press [Enter] to continue: ' SITENAME
+	# set the site and start to update
+	read -p 'enter a site name and press [Enter] to continue: ' SITENAME
+else
+	# set the sitename variable
+	SITENAME=$1
+fi
 
 # check the site for being drupal
 drupal_check

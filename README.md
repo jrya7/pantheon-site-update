@@ -6,17 +6,17 @@ Download or copy script and cd into directory with script
 
 Make script executable by running 
 
-``bash
-chmod 755 pantheon-site-update.sh
-``
+``chmod 755 pantheon-site-update.sh``
 
 Then run the script
 
-``bash
-./pantheon-site-update.sh
-``
+``./pantheon-site-update.sh``
 
 Script will walk you through steps with instructions and information
+
+Or pass the Pantheon sitename into the script
+
+``./pantheon-site-update.sh SITENAME``
 
 
 ## Workflow

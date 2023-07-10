@@ -5,6 +5,9 @@
 # functions
 ##
 # function for checking logged into terminus
+# if logged in then will ask to continue as logged in account
+# if not logged in then will try the terminus auth:login command
+# if fails then exits and has user login first
 terminus_auth_check() {
 	# run the whoami terminus command
 	RESPONSE=`terminus auth:whoami`
@@ -38,6 +41,7 @@ terminus_auth_check() {
 
 
 # function to check the site for being drupal
+# uses a regex to check the terminus site:info for being drupal
 drupal_check() {
 	# get the framework of the site and set regex
 	FRAMEWORK=`terminus site:info $SITENAME --field=framework`
@@ -47,7 +51,7 @@ drupal_check() {
     # check for a drupal site
     if [[ "$FRAMEWORK" =~ $REGEX ]]; then
     	# alls good so continue
-    	echo "valid drupal site so continuing..."
+    	echo "valid drupal site so continuing"
     # not a drupal site so exit
     else
 		echo "script only works for drupal sites, exiting..."
@@ -55,8 +59,28 @@ drupal_check() {
     fi
 }
 
+# function to check which drupal framework is used
+# uses a regex to check the terminus site:info for being drupal or drupalX
+drupal_framework() {
+	# get the framework of the site and set regex
+	FRAMEWORK=`terminus site:info $SITENAME --field=framework`
+    ERRORS='0'
+    REGEX="^drupal$"
+
+    # check for drupal as the framework
+    if [[ "$FRAMEWORK" =~ $REGEX ]]; then
+    	# alls good so continue
+    	echo "drupal7"
+    # check for a number after drupal in the framework field
+    else
+		echo "drupal8"
+    fi
+}
+
 
 # function to prep the site
+# can create backup of live site before updating - code, files, db
+# check for being in git mode to check & apply upstream updates
 drupal_prep() {
 	# print out a new line for spacing
 	printf '\n'
@@ -64,18 +88,12 @@ drupal_prep() {
 	# ask if user wants to backup the live env first
 	read -p "backup live environment? [y/n]  " yn
 	case $yn in
-		[Yy]* ) printf "\n[msg] creating backup of live environment for ${SITENAME}...\n"; 
+		[Yy]* ) printf "\ncreating backup of live environment for ${SITENAME}...\n"; 
 				# check for being in git mode
 				CONNECTION=`terminus env:info --field connection_mode -- $SITENAME.dev`
 				if [ "$CONNECTION" != "git" ]; then
 					# set to git mode
-					printf "\n[msg] switching to git connection-mode...\n"
-					terminus connection:set ${SITENAME}.dev git
-					if [ $? = 1 ]; then
-						$((ERRORS++))
-						echo "[msg] error in switching to git"
-						exit 0
-					fi
+					env_git
 				fi
 				# backup live
 				terminus backup:create ${SITENAME}.live;;
@@ -98,9 +116,12 @@ drupal_prep() {
 
 
 # update the drupal dev site
+# check for an apply upstream updates
+# if drupal7 or below site then check for module updates
+# if drupal8 or above site then skip module updates
 drupal_update() {
 	# let the user know checking for updates
-	printf "\nchecking for upstream updates\n"
+	printf "\nchecking for upstream updates...\n"
 
 	# check for upstream updates
 	upstreamCheck=`terminus upstream:updates:status -- ${SITENAME}.dev`
@@ -116,56 +137,68 @@ drupal_update() {
 		# has upstream so ask for updates
 		read -p "apply upstream updates? [y/n]  " yn
 		case $yn in
-			[Yy]* ) printf "\n[msg] applying upstream updates for ${SITENAME}...\n"; 
+			[Yy]* ) printf "\napplying upstream updates for ${SITENAME}...\n"; 
 					terminus upstream:updates:apply --updatedb --accept-upstream -- ${SITENAME}.dev
 		esac
 	# there is no upstream updates
 	else
-		printf "\n[msg] no upstream updates found"
+		printf "\nno upstream updates found"
 	fi
 
-	# switch back to sftp mode for module update checks
-	env_sftp
+	# check for drupal version
+	frameworkCheck=`drupal_framework`
 
-	# inform the user of the current action
-	printf "\n[msg] grabbing module update info...\n"
+	# framework is d7 so check for module updates
+	if [ "$frameworkCheck" == "drupal7" ]; then
+		# let the user know its d7 so checking for updates
+		printf "\ndrupal7 or below site so checking for module updates"
 
-	# check for updates
-	terminus drush ${SITENAME}.dev -- ups
+		# switch back to sftp mode for module update checks
+		env_sftp
 
-	# ask if user wants to update
-	read -p "apply module updates? [y/n]  " yn
-	case $yn in
-		[Yy]* ) printf "\n[msg] applying module updates for ${SITENAME}...\n"; 
-				# update drupal modules
-				terminus drush ${SITENAME}.dev -- up
-				if [ $? = 1 ]; then
-					$((ERRORS++))
-					printf "\n[err] error in module updates"
-					UPFAIL='drush command up (module updates) failed'
-				fi
+		# inform the user of the current action
+		printf "\ngrabbing module update info...\n"
 
-				# run the database updates
-				if [ -z "$UPFAIL" ]; then
-					printf "\n[msg] applying database updates...\n"
-					terminus drush ${SITENAME}.dev -- updb
+		# check for updates
+		terminus drush ${SITENAME}.dev -- ups
+
+		# ask if user wants to update
+		read -p "apply module updates? [y/n]  " yn
+		case $yn in
+			[Yy]* ) printf "\napplying module updates for ${SITENAME}...\n"; 
+					# update drupal modules
+					terminus drush ${SITENAME}.dev -- up
 					if [ $? = 1 ]; then
 						$((ERRORS++))
-						printf "\n[err] error in database updates"
-						UPDBFAIL='drush command updb (database updates) failed'
+						printf "\n[err] error in module updates"
+						UPFAIL='drush command up (module updates) failed'
 					fi
-				fi
 
-				# commit changes before pushing
-				read -p "commit changes to dev environment on Pantheon? [y/n] " DEPLOYDEV
-				case $DEPLOYDEV in
-					[Yy]* ) read -p "provide a note to attach to this commit: " MESSAGEDEV
-							terminus env:commit --message="$MESSAGEDEV" --force -- ${SITENAME}.dev
-							;;
-					[Nn]* ) exit 0;;
-				esac
+					# run the database updates
+					if [ -z "$UPFAIL" ]; then
+						printf "\napplying database updates...\n"
+						terminus drush ${SITENAME}.dev -- updb
+						if [ $? = 1 ]; then
+							$((ERRORS++))
+							printf "\n[err] error in database updates"
+							UPDBFAIL='drush command updb (database updates) failed'
+						fi
+					fi
 
-	esac
+					# commit changes before pushing
+					read -p "commit changes to dev environment on Pantheon? [y/n] " DEPLOYDEV
+					case $DEPLOYDEV in
+						[Yy]* ) read -p "provide a note to attach to this commit: " MESSAGEDEV
+								terminus env:commit --message="$MESSAGEDEV" --force -- ${SITENAME}.dev
+								;;
+						[Nn]* ) exit 0;;
+					esac
+		esac
+	# framework is d8 so dont check for module updates since handled by composer
+	else
+		printf "\ndrupal8 or above site so update modules via composer\n"
+
+	fi
 
 	# done with updates so let user check
 	printf "\ndev environment updated, check site if needed - https://dev-${SITENAME}.pantheonsite.io \n"
@@ -176,8 +209,11 @@ drupal_update() {
 
 
 # push up the drupal dev site
+# push changes to test env and get commit message
+# push changes to live env and get commit message
 drupal_push() {
-	# check with user and then move to test
+	# print out a new line for spacing and check with user and then move to test
+	printf '\n'
 	read -p "deploy changes to test environment on Pantheon? [y/n] " DEPLOYTEST
 	case $DEPLOYTEST in
 		[Yy]* ) read -p "provide a note to attach to this deployment: " MESSAGE
@@ -187,9 +223,11 @@ drupal_push() {
 		[Nn]* ) exit 0;;
 	esac
 
-	# print out a new line for spacing
-	printf '\n'
+	# done with updates so let user check
+	printf "\ntest environment updated, check site if needed - https://test-${SITENAME}.pantheonsite.io \n"
 
+	# print out a new line for spacing and ask to deploy to live
+	printf '\n'
 	read -p "deploy changes to live environment on Pantheon? [y/n] " DEPLOYLIVE
 	case $DEPLOYLIVE in
 		[Yy]* ) read -p "provide a note to attach to this deployment: " MESSAGE
@@ -216,7 +254,7 @@ errors_check() {
 # switch to git mode
 env_git() {
 	# set back to git mode
-	printf "\n[msg] switching to git connection-mode...\n"
+	printf "\nswitching to git connection mode...\n"
 	terminus connection:set ${SITENAME}.dev git
 	if [ $? = 1 ]; then
 		$((ERRORS++))
@@ -228,11 +266,11 @@ env_git() {
 # switch to sftp mode
 env_sftp() {
 	# switch back to sftp mode for module update checks
-	printf "\n[msg] switching to sftp connection-mode for module updates...\n"
+	printf "\nswitching to sftp connection mode for module updates...\n"
 	terminus connection:set ${SITENAME}.dev sftp
 	if [ $? = 1 ]; then
 		$((ERRORS++))
-		echo "[msg] error in switching to sftp"
+		echo "[err] error in switching to sftp"
 	fi
 }
 
@@ -244,7 +282,7 @@ env_sftp() {
 # main
 ##
 # start the script with an echo message
-echo "starting pantheon site update..."
+printf "\nstarting pantheon site update\n"
 
 # check for logged in user
 terminus_auth_check
@@ -254,7 +292,7 @@ terminus_auth_check
  	# no arguments so get site list and input
  	# grab the sites and display
 	printf '\nfetching site list...\n'
-	terminus site:list --fields="name,plan_name,framework,ID"
+	terminus site:list --fields="name,plan_name,framework"
 
 	# print out a new line for spacing
 	printf '\n'

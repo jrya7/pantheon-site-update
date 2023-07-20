@@ -4,6 +4,14 @@
 ## 
 # functions
 ##
+# function to display the help message
+show_help() {
+  echo "  Usage: $0 [SITENAME] [--no-check]"
+  echo ""
+  echo "  SITENAME: the site you want to update"
+  echo "  --no-check: optional flag to disable update prompts"
+}
+
 # function for checking logged into terminus
 # if logged in then will ask to continue as logged in account
 # if not logged in then will try the terminus auth:login command
@@ -315,9 +323,6 @@ env_sftp() {
 ## 
 # main
 ##
-# start the script with an echo message
-printf "\nstarting pantheon site update\n"
-
 # parse command line arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -325,12 +330,22 @@ while [[ $# -gt 0 ]]; do
       no_check_flag=true
       shift
       ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
     *)
       argument="$1"
       shift
       ;;
   esac
 done
+
+# start the script with an echo message
+printf "\nstarting pantheon site update\n"
+
+# check for logged in user
+terminus_auth_check
 
 # check for site name passed
 if [[ -n "$argument" ]]; then
@@ -348,9 +363,6 @@ else
 	# set the site and start to update
 	read -p 'enter a site name and press [Enter] to continue: ' SITENAME
 fi
-
-# check for logged in user
-terminus_auth_check
 
 # check the site for being drupal
 drupal_check

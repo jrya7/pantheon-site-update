@@ -12,6 +12,7 @@ show_help() {
   echo "  --no-check: optional flag to disable update prompts"
 }
 
+
 # function for checking logged into terminus
 # if logged in then will ask to continue as logged in account
 # if not logged in then will try the terminus auth:login command
@@ -101,7 +102,6 @@ drupal_prep() {
 	# check if the --no-check flag is provided to skip input
 	if [[ "$no_check_flag" == true ]]; then
 		printf "skipping backup of live environment\n"
-		read -p "provide a commit to attach to the deployment: " MESSAGEPREP
 	else
 		# ask if user wants to backup the live env first
 		read -p "backup live environment? [y/n]  " yn
@@ -142,6 +142,9 @@ drupal_update() {
 	# let the user know checking for updates
 	printf "\nchecking for upstream updates...\n"
 
+	# set the update check var to see if need to continue
+	updateCheck=true
+
 	# check for upstream updates
 	upstreamCheck=`terminus upstream:updates:status -- ${SITENAME}.dev`
 
@@ -166,14 +169,15 @@ drupal_update() {
 			case $yn in
 				[Yy]* ) printf "\napplying upstream updates for ${SITENAME}...\n"; 
 						terminus upstream:updates:apply --updatedb --accept-upstream -- ${SITENAME}.dev
+						;;
+				[Nn]* ) printf "\nstopping script...\n"
+						exit 0;;
 			esac
-
-			# done with updates so let user check
-			printf "\ndev environment updated, check site if needed - https://dev-${SITENAME}.pantheonsite.io"
 		fi
 	# there is no upstream updates
 	else
 		printf "\nno upstream updates found"
+		updateCheck=false
 	fi
 
 	# check for drupal version
@@ -224,14 +228,25 @@ drupal_update() {
 								;;
 						[Nn]* ) exit 0;;
 					esac
+					;;
+			[Nn]* ) if [[ "$updateCheck" == false ]]; then
+						printf "\nno updates to apply, stopping script...\n"
+						exit 0
+					fi
+					;;
 		esac
 	# framework is d8 so dont check for module updates since handled by composer
 	else
-		printf "\ndrupal8 or above site so update modules via composer\n"
-
+		if [[ "$updateCheck" == false ]]; then
+			printf "\nno updates to apply, stopping script...\n"
+			exit 0
+		else
+			printf "\ndrupal8 or above site so update modules via composer\n"
+		fi
 	fi
 
-	
+	# done with updates so let user check
+	printf "\ndev environment updated, check site if needed - https://dev-${SITENAME}.pantheonsite.io"
 	
 	# error checking
 	errors_check
@@ -239,26 +254,29 @@ drupal_update() {
 
 
 # push up the drupal dev site
-# push changes to test env and get commit message
-# push changes to live env and get commit message
+# push changes to test & live env using commit message from prep
 drupal_push() {
 	# print out a new line for spacing and check with user and then move to test
 	printf '\n'
 
 	# check if the --no-check flag is provided to skip input
 	if [[ "$no_check_flag" == true ]]; then
+		# get the commit message
+		read -p "provide a commit to attach to the deployment: " MESSAGEPREP
+
+		# now update test & live
 		printf "\napplying to test environment"
 		terminus env:deploy --note="${MESSAGEPREP}" --updatedb -- ${SITENAME}.test
 		terminus env:clear-cache ${SITENAME}.test
-
 		printf "\napplying to live environment"
 		terminus env:deploy --note="${MESSAGEPREP}" --updatedb -- ${SITENAME}.live
 		terminus env:clear-cache ${SITENAME}.live
 	else
 		read -p "deploy changes to test environment on Pantheon? [y/n] " DEPLOYTEST
 		case $DEPLOYTEST in
-			[Yy]* ) read -p "provide a commit to attach to this deployment: " MESSAGE
-					terminus env:deploy --note="$MESSAGE" --updatedb -- ${SITENAME}.test
+			[Yy]* ) # get the commit message
+					read -p "provide a commit to attach to the deployment: " MESSAGEPREP
+					terminus env:deploy --note="${MESSAGEPREP}" --updatedb -- ${SITENAME}.test
 					terminus env:clear-cache ${SITENAME}.test
 					;;
 			[Nn]* ) exit 0;;
@@ -271,8 +289,7 @@ drupal_push() {
 		printf '\n'
 		read -p "deploy changes to live environment on Pantheon? [y/n] " DEPLOYLIVE
 		case $DEPLOYLIVE in
-			[Yy]* ) read -p "provide a commit to attach to this deployment: " MESSAGE
-					terminus env:deploy --note="$MESSAGE" --updatedb -- ${SITENAME}.live
+			[Yy]* ) terminus env:deploy --note="${MESSAGEPREP}" --updatedb -- ${SITENAME}.live
 					terminus env:clear-cache ${SITENAME}.live
 					;;
 			[Nn]* ) exit 0;;

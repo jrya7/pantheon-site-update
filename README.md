@@ -35,4 +35,6 @@ If you pass the --no-check flag, then it will update dev, test, and live without
 
 If you do not pass the --no-check flag, then it will wait for your confirmation before pushing to test and live. You will have the option to backup the live environment before updating.
 
+If you pass the --no-check flag, it will still prompt you for a commit message before deploying to test
+
 If you do not pass a sitename argument, then it will use terminus to gather a list of sites in your account.

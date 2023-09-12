@@ -42,7 +42,7 @@ terminus_auth_check() {
 	else
 		# check if the --no-check flag is provided to skip input
 		if [[ "$no_check_flag" == true ]]; then
-			printf "logged into terminus as $RESPONSE \n"
+			printf "logged into terminus as $RESPONSE \n\n"
 		else
 			read -p "logged into terminus as $RESPONSE - press [y] to continue or [n] to exit: " login;
 			case $login in
@@ -162,7 +162,7 @@ drupal_update() {
 			terminus upstream:updates:apply --updatedb --accept-upstream -- ${SITENAME}.dev
 
 			# done with updates so let user check
-			printf "\ndev environment updated, applying to test and live"
+			printf "\nupstream updates applied to dev environment"
 		else
 			# has upstream so ask for updates
 			read -p "apply upstream updates? [y/n]  " yn
@@ -261,8 +261,8 @@ drupal_push() {
 
 	# check if the --no-check flag is provided to skip input
 	if [[ "$no_check_flag" == true ]]; then
-		# get the commit message
-		read -p "provide a commit to attach to the deployment: " MESSAGEPREP
+		# print the commit message
+		printf "\nusing the commit message: ${MESSAGEPREP}"
 
 		# now update test & live
 		printf "\napplying to test environment"
@@ -363,6 +363,11 @@ printf "\nstarting pantheon site update\n"
 
 # check for logged in user
 terminus_auth_check
+
+# check if the --no-check flag is provided to get commit message upfront
+if [[ "$no_check_flag" == true ]]; then
+	read -p "provide a commit to attach to this commit: " MESSAGEPREP
+fi
 
 # check for site name passed
 if [[ -n "$argument" ]]; then

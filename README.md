@@ -38,3 +38,7 @@ If you do not pass the --no-check flag, then it will wait for your confirmation 
 If you pass the --no-check flag, it will still prompt you for a commit message before deploying to test
 
 If you do not pass a sitename argument, then it will use terminus to gather a list of sites in your account.
+
+
+## TODO 
+If using the --no-check flag then will need to stop if upstream updates are not successful in applying to dev. Similar for not passing no-check where script shouldn't allow to continue and only option should be to exit.
